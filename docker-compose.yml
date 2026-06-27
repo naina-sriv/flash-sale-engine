@@ -2,5 +2,33 @@ version: '3.8'
 services:
   db:
     image: postgres:16-alpine
-    
+    container_name: sales-engine-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: sales-engine-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgres/data
+  redis:
+    image: redis:7-alpine
+    container_name: sales-engine-redis
+    ports:
+      - "6379:6379"  
+  api:
+    build: .
+    container_name: sales-engine-api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres+asyncpg://user:pass@db:5432/sales-engine-db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+volumes:
+  postgres_data:
+  
+
   
