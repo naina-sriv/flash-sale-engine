@@ -1,7 +1,7 @@
 from fastapi import APIRouter
-from core.redis_client import redis_client
+from app.core.redis_client import redis_client
 
-router=APIRouter(prefix="stock")
+router=APIRouter(prefix="/stock")
 
 @router.get("/stock")
 def get_stock():

@@ -1,12 +1,15 @@
 from fastapi import FastAPI
 from app.routes.buy import router as buy_router
 from app.routes.stock import router as stock_router
+from app.routes.auth import router as auth_router
 from app.core.redis_client import redis_client
 
 app = FastAPI()
 
 app.include_router(buy_router)
 app.include_router(stock_router)
+app.include_router(auth_router)
+
 
 @app.on_event("startup")
 def startup():
