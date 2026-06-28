@@ -3,3 +3,4 @@ uvicorn[standard]
 asyncpg
 sqlalchemy[asyncio]
 redis
+pyjwt
