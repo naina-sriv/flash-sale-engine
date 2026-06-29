@@ -1,7 +1,6 @@
 # Flash Sale Engine
 
-A high-concurrency flash-sale system inspired by **Savana's One Rupee One Impact** campaign. Built to handle thousands of concurrent requests without overselling, using Redis atomic operations, stateless JWT authentication, and asynchronous payment processing.
-
+High‑concurrency flash sale system built with FastAPI, Redis, and stateless JWT authentication. Implements horizontal scaling via Docker & Nginx, rate‑limiting, and anti‑bot protections: designed to handle 1‑Rupee sale traffic without crashing the database.
 ---
 
 ##  Features
