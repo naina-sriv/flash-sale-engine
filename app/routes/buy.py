@@ -2,11 +2,19 @@ from fastapi import APIRouter, Depends
 from app.core.redis_client import redis_client
 from app.models.requests import BuyRequest
 from app.dependencies.auth import get_current_user
+import time
+import asyncio
 
+
+async def process_payment(user_id: str, item_ids:list):
+    print("⏳ Background task started...")   # <-- Add this
+    await asyncio.sleep(3)
+    print(f"✅ Payment successful for user {user_id} for items {item_ids}")
+    
 router= APIRouter(prefix="/buy")
 flash_inventory=["1","3"]
 @router.post("/")
-def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
+async def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
     if redis_client.exists(f"purchased_flash:{user_id}"):
         return {"message":"only one flash order per customer"}
     lease_key=f"lease:{user_id}"
@@ -35,4 +43,5 @@ def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
     redis_client.setex(lease_key, 10, "active")
     if count==1:
         redis_client.setex(f"purchased_flash:{user_id}",89400,"active")
-    return {"message": "success"} 
+    asyncio.create_task(process_payment( user_id, req.item_id))
+    return {"message": "reserved"} 
