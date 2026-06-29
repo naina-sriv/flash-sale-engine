@@ -3,7 +3,7 @@ from app.core.redis_client import redis_client
 
 router=APIRouter(prefix="/stock")
 
-@router.get("/stock")
+@router.get("/")
 def get_stock():
     return {
         "stock:1": redis_client.get("stock:1"),

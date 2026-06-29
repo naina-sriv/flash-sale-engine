@@ -10,3 +10,4 @@ def login(request: LoginRequest):
     if request.user_id == "nain" and request.password != "admin123":
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token=jwt.encode({"user_id":request.user_id},SECRET_KEY, algorithm=ALGORITHM)
+    return {"token":token}
