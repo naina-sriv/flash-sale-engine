@@ -37,5 +37,4 @@ Thumbs.db
 
 *.pid
 
-spam.py
-test.py
+/app/tests

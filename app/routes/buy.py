@@ -32,7 +32,7 @@ def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
             return {"message": f"out of stock item {i}"}
         else:
             reserved_items.append(i)
-    redis_client.setex(lease_key, 300, "active")
+    redis_client.setex(lease_key, 10, "active")
     if count==1:
         redis_client.setex(f"purchased_flash:{user_id}",89400,"active")
     return {"message": "success"} 
