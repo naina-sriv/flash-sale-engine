@@ -16,3 +16,4 @@ def startup():
     redis_client.set("stock:1", 10)
     redis_client.set("stock:2", 12)
     redis_client.set("stock:3", 3)
+    redis_client.sadd("flash_items", "1","3")

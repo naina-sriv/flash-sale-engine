@@ -12,11 +12,8 @@ async def process_payment(user_id: str, item_ids:list):
     print(f"✅ Payment successful for user {user_id} for items {item_ids}")
     
 router= APIRouter(prefix="/buy")
-flash_inventory=["1","3"]
 @router.post("/")
 async def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
-    if redis_client.exists(f"purchased_flash:{user_id}"):
-        return {"message":"only one flash order per customer"}
     lease_key=f"lease:{user_id}"
     if redis_client.exists(lease_key):
         return {"message":f"some item is already reserved for you."}
@@ -26,7 +23,9 @@ async def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
         return {"message": "duplicates not allowed"}
     count=0
     for i in req.item_id:
-        if i in flash_inventory:
+        if redis_client.sismember("flash_items", i):
+            if redis_client.exists(f"purchased_flash:{user_id}"):
+                return {"message":"only one flash order per customer"}
             count+=1
     if count>1:
         return {"message":"You can buy only one flash sale item per order"}
