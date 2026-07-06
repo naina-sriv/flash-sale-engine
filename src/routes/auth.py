@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from app.models.requests import LoginRequest
-from app.core.config import SECRET_KEY, ALGORITHM
+from src.models.requests import LoginRequest
+from src.core.config import SECRET_KEY, ALGORITHM
 import jwt
 
 router=APIRouter(prefix="/auth")

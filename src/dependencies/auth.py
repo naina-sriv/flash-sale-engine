@@ -1,6 +1,6 @@
 from fastapi import Request, HTTPException
 import jwt
-from app.core.config import SECRET_KEY, ALGORITHM
+from src.core.config import SECRET_KEY, ALGORITHM
 
 def get_current_user(request: Request):
     ## Print everything so we can see what's arriving

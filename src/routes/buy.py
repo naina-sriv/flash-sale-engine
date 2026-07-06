@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
-from app.core.redis_client import redis_client
-from app.models.requests import BuyRequest
-from app.dependencies.auth import get_current_user
+from src.core.redis_client import redis_client
+from src.models.requests import BuyRequest
+from src.dependencies.auth import get_current_user
 import time
 import asyncio
 
@@ -38,7 +38,7 @@ async def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
             redis_client.delete(f"lease:{user_id}")
             return {"message": f"out of stock item {i}"}
         else:
-            reserved_items.append(i)
+            reserved_items.srcend(i)
     redis_client.setex(lease_key, 10, "active")
     if count==1:
         redis_client.setex(f"purchased_flash:{user_id}",89400,"active")

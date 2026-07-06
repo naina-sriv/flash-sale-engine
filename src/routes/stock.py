@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.core.redis_client import redis_client
-from app.dependencies.auth import get_current_user
-from app.models.items import ItemRequest
+from src.core.redis_client import redis_client
+from src.dependencies.auth import get_current_user
+from src.models.items import ItemRequest
 
 router=APIRouter(prefix="/stock")
 

@@ -37,4 +37,4 @@ Thumbs.db
 
 *.pid
 
-/app/tests
+/src/tests

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.dependencies.auth import get_current_user
-from app.core.redis_client import redis_client
-from app.models.items import ItemRequest
+from src.dependencies.auth import get_current_user
+from src.core.redis_client import redis_client
+from src.models.items import ItemRequest
 
 router=APIRouter(prefix="/admin")
 
