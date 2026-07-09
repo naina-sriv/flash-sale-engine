@@ -8,7 +8,21 @@ class SignupResponse(BaseModel):
 
 class LoginResponse(BaseModel):
     token: str
+    refresh_token: str
     expires_in_minutes: int
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    expires_in_minutes: int
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str
 
 
 class BuyResponse(BaseModel):
