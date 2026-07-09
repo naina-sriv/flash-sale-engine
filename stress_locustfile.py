@@ -1,10 +1,12 @@
-from locust import HttpUser, task, between
 import random
+
+from locust import HttpUser, between, task
+
 
 class StressUser(HttpUser):
     # No wait time, hammer the endpoint!
     wait_time = between(0, 0)
-    
+
     @task
     def attempt_purchase(self):
         # 1M users to avoid duplicate locks slowing down the RPS

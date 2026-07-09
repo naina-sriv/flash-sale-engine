@@ -3,6 +3,7 @@ import random
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -57,9 +58,7 @@ async def process_payment(user_id: str, item_ids: list):
             await session.commit()
             logger.info(f"Order(s) saved for user {user_id}")
     except IntegrityError as ie:
-        logger.error(
-            f"Database integrity error during order persistence for user {user_id}: {ie}"
-        )
+        logger.error(f"DB integrity error during order save for user {user_id}: {ie}")
         logger.info(f"Rolling back Redis stock decrements for user {user_id}...")
         for item_id in item_ids:
             redis_client.incr(f"stock:{item_id}")
@@ -115,7 +114,8 @@ async def click_buy(req: BuyRequest, user_id: str = Depends(buy_rate_limiter)):
             redis_client.expire(f"failed_buy_attempts:{user_id}", 60)
         if failed_count >= 5:
             logger.warning(
-                f"[ALERT] Abuse detected: user_id={user_id} exceeded failure limit with {failed_count} failures."
+                f"[ALERT] Abuse: user {user_id} exceeded failure "
+                f"limit ({failed_count} fails)."
             )
             redis_client.setex(f"blocked_user:{user_id}", 300, "blocked")
 
@@ -132,9 +132,11 @@ async def click_buy(req: BuyRequest, user_id: str = Depends(buy_rate_limiter)):
         if int(saved_challenge) != req.challenge_answer:
             record_failed_attempt(user_id)
             raise HTTPException(status_code=400, detail="Incorrect challenge answer.")
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
         record_failed_attempt(user_id)
-        raise HTTPException(status_code=400, detail="Invalid challenge answer format.")
+        raise HTTPException(
+            status_code=400, detail="Invalid challenge answer format."
+        ) from e
 
     # Remove challenge once verified to prevent reuse
     redis_client.delete(f"challenge:{user_id}")
@@ -183,25 +185,25 @@ async def click_buy(req: BuyRequest, user_id: str = Depends(buy_rate_limiter)):
     asyncio.create_task(process_payment(user_id, req.item_id))
     return BuyResponse(message="reserved")
 
-from pydantic import BaseModel
 
 class StressBuyRequest(BaseModel):
     user_id: str
     item_id: str
 
+
 @router.post("/stress")
 async def stress_buy(req: StressBuyRequest):
     user_id = req.user_id
     item_id = req.item_id
-    
+
     lease_key = f"lease:{user_id}"
     if redis_client.exists(lease_key):
         return {"message": "already reserved"}
-        
+
     new_val = redis_client.decr(f"stock:{item_id}")
     if new_val < 0:
         redis_client.incr(f"stock:{item_id}")
         return {"message": "out of stock"}
-        
+
     redis_client.set(lease_key, "active", ex=10)
     return {"message": "reserved"}

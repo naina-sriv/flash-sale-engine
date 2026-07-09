@@ -1,74 +1,117 @@
 # Flash Sale Engine
 
-A high-concurrency flash-sale backend built with FastAPI, Redis, and PostgreSQL. Uses Redis atomic operations (`DECR`, `SETEX`) to prevent overselling and duplicate purchases under burst traffic, with JWT-based auth and async order persistence.
+A high-concurrency, horizontally scaled flash-sale backend engineered to handle extreme traffic bursts. Built with **FastAPI**, **Redis**, and **PostgreSQL**, this engine uses atomic Redis operations to completely eliminate overselling and race conditions without creating database bottlenecks.
 
-## Features
+## Architecture & System Topology
 
-- **Atomic Stock Management** — Redis `DECR` prevents race conditions on stock counts across concurrent requests.
-- **Duplicate-Purchase Lock** — Redis `SETEX` lease (`lease:{user_id}`, 10s TTL) blocks a user from double-submitting a purchase while one is in flight.
-- **One Flash Item Per Day** — `purchased_flash:{user_id}` key limits each user to one flash-sale item per day.
-- **Rollback on Partial Failure** — if any item in a multi-item order is out of stock, previously decremented stock for that order is restored.
-- **Anti-Bot Challenge** — requires users to solve a math challenge (`/buy/challenge`) before purchasing, preventing script spam.
-- **Rate Limiting** — strict rate limiters on login and purchase endpoints to prevent abuse.
-- **JWT Authentication** — stateless auth via PyJWT, with `asyncio.to_thread` for non-blocking bcrypt password hashing.
-- **Role-Based Admin Routes** — secure `/admin/*` routes checking Postgres `users` table.
-- **Async Order Persistence** — background `asyncio` task writes to Postgres via SQLAlchemy (async) so the user gets a 200 OK instantly.
+The engine is horizontally scaled behind an **Nginx** reverse proxy, distributing traffic across multiple FastAPI replicas. 
+
+```mermaid
+graph TD
+    Client(User) -->|HTTP| Nginx[Nginx Load Balancer\nPort 80]
+    
+    subgraph "Docker Network"
+        Nginx -->|Round Robin| API1[FastAPI Replica 1]
+        Nginx -->|Round Robin| API2[FastAPI Replica 2]
+        Nginx -->|Round Robin| API3[FastAPI Replica 3]
+        
+        API1 & API2 & API3 <-->|Atomic DECR & Locks| Redis[(Redis\nIn-Memory Cache)]
+        API1 & API2 & API3 -.->|Background Write-Behind| Postgres[(PostgreSQL\nPersistent Storage)]
+    end
+```
+
+### The Flash Sale Flow (Write-Behind Pattern)
+
+To achieve maximum throughput, the engine NEVER waits for PostgreSQL during a purchase. It relies entirely on Redis for instantaneous validation, and saves the order to PostgreSQL in the background.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant FastAPI
+    participant Redis
+    participant Postgres
+
+    User->>FastAPI: POST /buy/ (Item: iPhone)
+    FastAPI->>Redis: EXISTS lease:{user_id}
+    Redis-->>FastAPI: False (No lock found)
+    FastAPI->>Redis: DECR stock:iPhone
+    Redis-->>FastAPI: 0 (Success, reserved!)
+    FastAPI->>Redis: SETEX lease:{user_id} 10s (Set duplicate lock)
+    FastAPI-->>User: 200 OK (Item Reserved!)
+    
+    Note over FastAPI,Postgres: Async Background Task
+    FastAPI-xPostgres: AsyncSession.add(Order) & Commit()
+```
+
+## Core Features
+
+- **Horizontal Scaling** — Traffic is distributed across 3 independent API replicas via Nginx.
+- **Atomic Stock Management** — Redis `DECR` prevents race conditions on stock counts across thousands of concurrent requests.
+- **Duplicate-Purchase Lock** — Redis `SETEX` lease (`lease:{user_id}`) strictly blocks a user from double-submitting a purchase while one is in flight.
+- **Rollback on Partial Failure** — If any item in a multi-item cart is out of stock, previously decremented stock for that order is instantly restored.
+- **Anti-Bot Challenge** — Requires users to solve a math challenge (`/buy/challenge`) before purchasing, preventing script spam.
+- **Rate Limiting** — Strict rate limiters on login and purchase endpoints to drop malicious traffic at the gate.
+- **Dual JWT Authentication** — Stateless auth featuring short-lived access tokens and 7-day refresh tokens. CPU-heavy `bcrypt` hashing is offloaded to a thread pool (`asyncio.to_thread`).
 - **Database Migrations** — Alembic is configured for programmatic migrations on startup.
-- **Dockerized** — FastAPI (multi-worker) + Postgres + Redis via `docker-compose`.
 
 ## Tech Stack
 
-| Layer | Tools |
+| Layer | Technologies |
 | :--- | :--- |
-| **API** | FastAPI, Pydantic, Uvicorn |
-| **Cache / Locking** | Redis |
+| **API Framework** | FastAPI, Pydantic, Uvicorn |
+| **Concurrency / Cache** | Redis |
 | **Database** | PostgreSQL, SQLAlchemy (async), asyncpg, Alembic |
-| **Auth** | PyJWT, bcrypt |
-| **Testing** | Pytest, Locust |
-| **Code Quality** | Ruff, pre-commit |
+| **Security** | PyJWT, bcrypt |
+| **Load Balancing** | Nginx |
 | **Containerization** | Docker, Docker Compose |
+| **Load Testing** | Locust |
 
 ## Setup & Run
 
-### 1. Clone and configure
+### 1. Clone and Configure
 
 ```bash
 git clone https://github.com/naina-sriv/flash-sale-engine.git
 cd flash-sale-engine
 ```
 
-Create a `.env` file:
+Create a `.env` file in the root directory:
 ```
-SECRET_KEY=your-secret-key
+SECRET_KEY=your-super-secret-key
 ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
-### 2. Run with Docker Compose
+### 2. Run the Stack
 
+Spin up the entire architecture (Nginx, 3x API replicas, Postgres, Redis):
 ```bash
 docker compose up --build -d
 ```
 
 ### 3. Load Testing
 
-A Locust load test is included to verify the concurrency model. It tests the raw Redis throughput.
+A Locust load test is included to verify the concurrency model. Test the Nginx load balancer natively:
 
 ```bash
-python -m locust -f stress_locustfile.py --headless -u 1000 -r 200 --run-time 30s -H http://localhost:8000
+python -m locust -f stress_locustfile.py --headless -u 1000 -r 200 --run-time 30s -H http://localhost
 ```
-On a local machine, the API typically handles ~500+ Requests Per Second (RPS) before CPU throttling kicks in, demonstrating the robustness of the Redis lock-free atomic decrements.
 
 ## API Endpoints
 
 | Endpoint | Method | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | `/auth/signup` | POST | — | Registers a new user |
-| `/auth/login` | POST | — | Returns a JWT |
+| `/auth/login` | POST | — | Returns Access & Refresh JWTs |
+| `/auth/refresh` | POST | — | Generates a new access token |
+| `/auth/forgot-password`| POST | — | Generates a secure reset token via Redis |
+| `/auth/reset-password` | POST | — | Updates the user's password |
 | `/buy/challenge` | GET | JWT | Returns a math challenge question |
-| `/buy/` | POST | JWT | Submits challenge answer and reserves item(s) |
+| `/buy/` | POST | JWT | Submits answer and reserves item(s) |
 | `/buy/stress` | POST | — | Raw performance testing endpoint |
 | `/stock/` | GET | — | Returns current Redis stock counts |
-| `/stock/set` | POST | JWT + admin | Sets stock manually |
-| `/admin/flash/add` | POST | JWT + admin | Adds an item to the flash sale |
-| `/admin/flash/remove`| POST | JWT + admin | Removes an item from the flash sale |
-| `/admin/flash/list` | GET | JWT + admin | Lists current flash-sale items |
+| `/stock/set` | POST | JWT+Admin | Sets stock manually |
+| `/admin/flash/add` | POST | JWT+Admin | Adds an item to the flash sale |
+| `/admin/flash/remove`| POST | JWT+Admin | Removes an item from the flash sale |
+| `/admin/flash/list` | GET | JWT+Admin | Lists current flash-sale items |

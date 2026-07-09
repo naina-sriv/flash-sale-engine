@@ -125,10 +125,10 @@ async def refresh_token(request: RefreshRequest):
             access_token=new_access_token,
             expires_in_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
         )
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Refresh token has expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    except jwt.ExpiredSignatureError as e:
+        raise HTTPException(status_code=401, detail="Refresh token has expired") from e
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail="Invalid refresh token") from e
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
