@@ -15,14 +15,14 @@ async def process_payment(user_id: str, item_ids:list):
     print(f"✅ Payment successful for user {user_id} for items {item_ids}")
     async with AsyncSessionLocal() as session:
         for item_id in item_ids:
-                new_order = Order(
+            new_order = Order(
                 user_id=int(user_id),
                 product_id=int(item_id),
                 quantity=1,
                 price_at_purchase=10.0,  # placeholder — later, fetch from products table
-                status="paid"
+                status="paid",
             )
-        session.add(new_order)
+            session.add(new_order)
         await session.commit()
         print(f"✅ Order(s) saved for user {user_id}")
     
@@ -48,6 +48,7 @@ async def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
     for i in req.item_id:
         new_val=redis_client.decr(f"stock:{i}")
         if new_val<0:
+            redis_client.incr(f"stock:{i}")  # undo this item's own decrement, not just prior ones
             for j in reserved_items:
                 redis_client.incr(f"stock:{j}")
             redis_client.delete(f"lease:{user_id}")

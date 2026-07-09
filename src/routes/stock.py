@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from src.core.redis_client import redis_client
-from src.dependencies.auth import get_current_user
+from src.dependencies.auth import require_admin
 from src.models.items import ItemRequest
 
 router=APIRouter(prefix="/stock")
@@ -15,8 +15,6 @@ def get_stock():
         
     
 @router.post("/set")
-def set_stock(item:ItemRequest, user_id:str=Depends(get_current_user)):
-    if user_id!="admin":
-        raise HTTPException(403, "Admin privileges required")
-    redis_client.set(f"stock:{item.id}",item.qty)
-    return {"message":"stock updated"} 
+async def set_stock(item: ItemRequest, _ = Depends(require_admin)):
+    redis_client.set(f"stock:{item.id}", item.qty)
+    return {"message": "stock updated"}

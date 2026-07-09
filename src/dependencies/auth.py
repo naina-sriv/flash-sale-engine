@@ -17,9 +17,18 @@ def get_current_user(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
-    
-    token = auth_header.split()[1]
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Authorization header must be 'Bearer <token>'")
+
+    token = parts[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
     return payload.get("user_id")
 
 async def require_admin(user_id: str = Depends(get_current_user)):

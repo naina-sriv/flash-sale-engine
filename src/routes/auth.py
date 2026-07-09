@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
 from src.models.requests import LoginRequest
-from src.core.config import SECRET_KEY, ALGORITHM
+from src.core.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 import jwt
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from src.core.db import AsyncSessionLocal
 from src.schema.db_models import User
@@ -23,10 +24,11 @@ async def login(request: LoginRequest):
     if not bcrypt.checkpw(request.password.encode('utf-8'), user.hashed_password.encode('utf-8')):  
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     token = jwt.encode(
-        {"user_id": user.id, "role": user.role},
+        {"user_id": user.id, "role": user.role, "exp": expire},
         SECRET_KEY,
         algorithm=ALGORITHM
     )
-    return {"token": token}
+    return {"token": token, "expires_in_minutes": ACCESS_TOKEN_EXPIRE_MINUTES}
 
