@@ -1,15 +1,32 @@
-import sys
 import os
-import pytest
+import sys
+
 import fakeredis
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 @pytest.fixture
 def fake_redis():
-    """A fresh in-memory Redis stand-in per test."""
-    return fakeredis.FakeStrictRedis(decode_responses=True)
+    """A fresh in-memory Redis stand-in per test. If a real Redis is running on localhost, use it instead, cleaning it up before/after."""
+    import os
+
+    import redis
+
+    use_real = os.getenv("USE_REAL_REDIS", "false").lower() == "true"
+    if use_real:
+        client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+        try:
+            client.ping()
+            client.flushdb()
+            yield client
+            client.flushdb()
+            return
+        except Exception as e:
+            print(f"Failed to connect to real Redis, falling back to fakeredis: {e}")
+            pass
+    yield fakeredis.FakeStrictRedis(decode_responses=True)
 
 
 @pytest.fixture

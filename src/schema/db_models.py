@@ -1,6 +1,18 @@
-from sqlalchemy import Column, Integer, String, Float, Text, ForeignKey, DateTime
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.sql import func
+
 from src.core.db import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -10,14 +22,14 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
     role = Column(String, default="user")
-    
+
     address_line1 = Column(String, nullable=True)
     address_line2 = Column(String, nullable=True)
     city = Column(String, nullable=True)
     state = Column(String, nullable=True)
     pincode = Column(String, nullable=True)
     country = Column(String, default="India")
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -35,7 +47,7 @@ class Product(Base):
 
 class Order(Base):
     __tablename__ = "orders"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
@@ -43,3 +55,8 @@ class Order(Base):
     price_at_purchase = Column(Float, nullable=False)
     status = Column(String, default="pending")  # pending, paid, failed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    flash_sale_date = Column(Date, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "flash_sale_date", name="uq_user_flash_sale_date"),
+    )

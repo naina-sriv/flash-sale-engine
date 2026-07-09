@@ -2,3 +2,6 @@ pytest==8.3.3
 pytest-asyncio==0.24.0
 fakeredis==2.36.2
 aiosqlite==0.20.0
+locust
+ruff
+black

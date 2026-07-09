@@ -1,0 +1,39 @@
+from pydantic import BaseModel
+
+
+class SignupResponse(BaseModel):
+    message: str
+    user_id: int
+
+
+class LoginResponse(BaseModel):
+    token: str
+    expires_in_minutes: int
+
+
+class BuyResponse(BaseModel):
+    message: str
+
+
+class ChallengeResponse(BaseModel):
+    challenge_id: str
+    question: str
+
+
+class StockUpdateResponse(BaseModel):
+    message: str
+
+
+class AdminFlashResponse(BaseModel):
+    message: str
+
+
+class FlashListResponse(BaseModel):
+    flash_items: list[str]
+
+
+class HealthResponse(BaseModel):
+    status: str
+    redis: str
+    postgres: str
+    timestamp: float
