@@ -1,253 +1,138 @@
-#  Flash Sale Engine
+# Flash Sale Engine
 
-High‑concurrency flash sale system built with FastAPI, Redis, and stateless JWT authentication. Implements horizontal scaling via Docker & Nginx, rate‑limiting, and anti‑bot protections: designed to handle 1‑Rupee sale traffic without crashing the database.
+A high-concurrency flash-sale backend built with FastAPI, Redis, and PostgreSQL. Uses Redis atomic operations (`DECR`, `SETEX`) to prevent overselling and duplicate purchases under burst traffic, with JWT-based auth and async order persistence.
 
-##  Features
+> Note: this is a work-in-progress learning project, not a production system. See [Known Limitations](#known-limitations) below for what's not solved yet.
 
--  **Atomic Stock Management** – Redis `DECR` eliminates race conditions.
--  **Stateless JWT Authentication** – No database lookups; scales horizontally.
--  **Distributed Lease Lock** – Prevents duplicate purchases (5-minute payment hold).
--  **Daily Purchase Limit** – One flash item per user per day (24-hour lock).
--  **Asynchronous Payments** – Background task processing returns `"Reserved"` in < 50ms.
--  **Rollback on Failure** – Compensating transactions restore stock if any item fails.
--  **Modular Codebase** – Separation of routes, models, core, dependencies.
--  **Docker Ready** – Containerized with Redis for easy deployment.
+## Features
 
----
+- **Atomic Stock Management** — Redis `DECR` prevents race conditions on stock counts across concurrent requests.
+- **Duplicate-Purchase Lock** — Redis `SETEX` lease (`lease:{user_id}`, 10s TTL) blocks a user from double-submitting a purchase while one is in flight.
+- **One Flash Item Per Day** — `purchased_flash:{user_id}` key (24.8h TTL) limits each user to one flash-sale item per day.
+- **Rollback on Partial Failure** — if any item in a multi-item order is out of stock, previously decremented stock for that order is restored.
+- **JWT Authentication** — stateless auth via PyJWT (HS256), with bcrypt password hashing on login.
+- **Role-Based Admin Routes** — `/admin/*` routes check `role == "admin"` against the Postgres `users` table.
+- **Async Order Persistence** — background `asyncio` task simulates a 3-second payment step, then writes to Postgres via SQLAlchemy (async).
+- **Dockerized** — FastAPI + Postgres + Redis via `docker-compose`, with healthchecks gating service startup order.
 
-##  Tech Stack
+## Tech Stack
 
 | Layer | Tools |
 | :--- | :--- |
 | **API** | FastAPI, Pydantic, Uvicorn |
-| **Cache/State** | Redis (Docker) |
-| **Auth** | PyJWT (HS256) |
-| **Async** | asyncio |
+| **Cache / Locking** | Redis |
+| **Database** | PostgreSQL, SQLAlchemy (async), asyncpg |
+| **Auth** | PyJWT (HS256), bcrypt |
+| **Async** | asyncio (`create_task` for background payment simulation) |
 | **Containerization** | Docker, Docker Compose |
-| **Testing** | Locust (load testing) |
-
----
-
-## Architecture Overview
-
-```
-┌──────────────┐
-│   Client     │
-│ (Browser/API)│
-└──────┬───────┘
-       │ (JWT in Header)
-       ▼
-┌─────────────────────────────────────────────┐
-│              FastAPI Gateway                │
-│  - Routes: /auth/login, /buy/, /stock       │
-│  - Dependencies: get_current_user (JWT)     │
-│  - Async Endpoints (async def)              │
-└──────┬──────────────────┬───────────────────┘
-       │                  │
-       │ (Stock DECR)     │ (Lease SETEX)
-       ▼                  ▼
-┌──────────────┐    ┌─────────────────────┐
-│    Redis     │    │   Redis (Lease)     │
-│  stock:{id}  │    │ lease:{user_id}     │
-│  atomic ops  │    │ purchased_flash:{}  │
-└──────────────┘    └─────────────────────┘
-       │
-       │ (After payment success)
-       ▼
-┌─────────────────────────────────────────┐
-│     Background Task (asyncio)           │
-│  - Simulates 3-second payment gateway   │
-│  - Prints "Payment successful"          │
-│  - (Next: writes to SQLAlchemy DB)      │
-└─────────────────────────────────────────┘
-```
-
----
-
-## 🛠️ Setup & Run
-
-### Prerequisites
-
-- Python 3.10+
-- Redis (Docker recommended)
-- Git
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/your-username/flash-sale-engine.git
-cd flash-sale-engine
-```
-
-### 2. Create a Virtual Environment & Install Dependencies
-
-```bash
-python -m venv .venv
-source .venv/bin/activate   # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-**Sample `requirements.txt`:**
-```
-fastapi
-uvicorn
-redis
-pyjwt
-python-dotenv
-httpx
-asyncio
-```
-
-### 3. Environment Variables
-
-Create a `.env` file in the project root:
-
-```
-SECRET_KEY=savana_mentor_super_secret_key_32chars
-ALGORITHM=HS256
-REDIS_HOST=localhost
-REDIS_PORT=6379
-```
-
-### 4. Run Redis (Docker)
-
-```bash
-docker run -d -p 6379:6379 --name redis-flash redis:alpine
-```
-
-### 5. Start the FastAPI Server
-
-```bash
-uvicorn main:app --reload --port 5000
-```
-
-Server will be available at `http://localhost:5000` (Swagger at `/docs`).
-
----
-
-## 📬 API Endpoints
-
-### Authentication
-
-| Endpoint | Method | Description | Request Body |
-| :--- | :--- | :--- | :--- |
-| `/auth/login` | POST | Login and receive JWT token | `{"user_id": "nain", "password": "admin123"}` |
-
-**Response:**
-```json
-{"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
-```
-
-### Flash Sale Purchase
-
-| Endpoint | Method | Headers | Request Body |
-| :--- | :--- | :--- | :--- |
-| `/buy/` | POST | `Authorization: Bearer <token>` | `{"user_id": "nain", "item_id": ["1"]}` |
-
-**Response:**
-```json
-{"message": "reserved"}
-```
-
-### Stock Check (Debug)
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/stock/stock` | GET | Returns current Redis stock values |
-
----
-
-## 🧪 Testing
-
-### Manual Test with `curl`
-
-```bash
-# 1. Login
-curl -X POST "http://localhost:5000/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"user_id":"nain","password":"admin123"}'
-
-# 2. Copy the token, then buy
-curl -X POST "http://localhost:5000/buy/" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your_token>" \
-  -d '{"user_id":"nain","item_id":["1"]}'
-```
-
-### Performance Measurement (PowerShell)
-
-```powershell
-$token = (Invoke-RestMethod -Uri "http://localhost:5000/auth/login" -Method Post -ContentType "application/json" -Body '{"user_id":"nain","password":"admin123"}').token
-
-Measure-Command {
-    Invoke-RestMethod -Uri "http://localhost:5000/buy/" -Method Post -Headers @{Authorization = "Bearer $token"} -Body '{"user_id":"nain","item_id":["2"]}' -ContentType "application/json"
-}
-```
-
-**Expected response time:** < 50ms.
-
----
 
 ## Project Structure
 
 ```
 flash-sale-engine/
-├── app/
+├── main.py                     # FastAPI app entrypoint, router registration, startup hook
+├── src/
 │   ├── core/
-│   │   ├── config.py           # Env vars, SECRET_KEY
+│   │   ├── config.py           # Env vars: SECRET_KEY, ALGORITHM, REDIS_HOST/PORT, DATABASE_URL
+│   │   ├── db.py                # Async SQLAlchemy engine, session factory, Base
 │   │   └── redis_client.py     # Redis connection
 │   ├── dependencies/
-│   │   └── auth.py             # get_current_user (JWT)
+│   │   └── auth.py             # get_current_user (JWT decode), require_admin (DB role check)
 │   ├── models/
-│   │   └── requests.py         # BuyRequest, LoginRequest (Pydantic)
+│   │   ├── items.py            # ItemRequest (admin stock add/remove)
+│   │   └── requests.py         # BuyRequest, LoginRequest
 │   ├── routes/
-│   │   ├── buy.py              # POST /buy (flash sale logic)
+│   │   ├── admin.py            # POST /admin/flash/add, /admin/flash/remove, GET /admin/flash/list
 │   │   ├── auth.py             # POST /auth/login
-│   │   └── stock.py            # GET /stock
-│   └── __init__.py
-├── main.py                     # FastAPI app, include routers, startup
-├── .env                        # Environment variables (gitignored)
-├── .gitignore
+│   │   ├── buy.py              # POST /buy/
+│   │   └── stock.py            # GET /stock/, POST /stock/set
+│   └── schema/
+│       └── db_models.py        # User, Product, Order (SQLAlchemy models)
+├── Dockerfile
+├── docker-compose.yml           # postgres + redis + api, with healthcheck-gated startup
 ├── requirements.txt
-└── README.md
+└── .gitignore
 ```
 
----
+## Setup & Run
 
-## Security Considerations
+### Prerequisites
+- Docker & Docker Compose
+- A `.env` file at the repo root (gitignored — the Dockerfile copies it in, so it must exist locally before building)
 
-- **JWT Secret**: Store `SECRET_KEY` in `.env` – never hardcode.
-- **Password**: Currently hardcoded (`admin123`) – replace with hashed DB in production.
-- **Lease TTL**: 5 minutes balances fairness and resource release.
+### 1. Clone and configure
 
----
+```bash
+git clone https://github.com/naina-sriv/flash-sale-engine.git
+cd flash-sale-engine
+```
 
-## Future Improvements
+Create a `.env` file:
+```
+SECRET_KEY=your-secret-key
+ALGORITHM=HS256
+```
 
-- **Database Persistence**: Store orders in PostgreSQL after payment success.
-- **Cart Management**: `POST /cart/add`, `GET /cart`, `DELETE /cart`.
-- **Real Payment Gateway**: Integrate Razorpay/Stripe Webhooks.
-- **Horizontal Scaling**: Add Nginx reverse proxy and multiple FastAPI replicas.
-- **Observability**: Structured logging, Prometheus metrics.
+### 2. Run with Docker Compose
 
----
+```bash
+docker-compose up --build
+```
 
-## Key Design Decisions
+This starts Postgres, Redis, and the API (port `8000`), in that dependency order via healthchecks. On startup, the app seeds Redis with sample stock:
+- `stock:1 = 10`, `stock:2 = 12`, `stock:3 = 3`
+- `flash_items = {1, 3}`
 
-- **Atomic Operations** – Redis `DECR` eliminates race conditions and prevents overselling.
-- **Distributed Locks** – Redis `SETEX` with TTL handles payment holds and auto-releases inventory.
-- **Async Processing** – `asyncio.create_task` keeps APIs responsive under load.
-- **Stateless Authentication** – JWT allows horizontal scaling without session storage.
-- **Modular Architecture** – Separation of routes, models, dependencies, and configuration.
-- **Rollback Pattern** – Compensating transactions restore stock if any item fails.
+### 3. Try it
 
----
+```bash
+# Login (requires a user already in the users table — no signup route exists yet)
+curl -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"yourpassword"}'
+
+# Buy (item 1 or 3 are flash items per the seed data)
+curl -X POST "http://localhost:8000/buy/" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token_from_login>" \
+  -d '{"user_id":"1","item_id":["1"]}'
+
+# Check stock
+curl "http://localhost:8000/stock/"
+```
+
+## API Endpoints
+
+| Endpoint | Method | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `/auth/login` | POST | — | Returns a JWT for a registered user |
+| `/buy/` | POST | JWT | Attempts to reserve item(s); rejects duplicates, enforces one-flash-item-per-day |
+| `/stock/` | GET | — | Returns current Redis stock counts for all `stock:*` keys |
+| `/stock/set` | POST | JWT (broken, see below) | Intended to let admins set stock manually |
+| `/admin/flash/add` | POST | JWT + admin role | Adds an item to the flash sale set with initial stock |
+| `/admin/flash/remove` | POST | JWT + admin role | Removes an item from the flash sale set |
+| `/admin/flash/list` | GET | JWT + admin role | Lists current flash-sale item IDs |
+
+## Known Limitations
+
+Documenting these here deliberately rather than glossing over them:
+
+- **`/stock/set`'s admin check is broken.** It compares the JWT's numeric `user_id` to the literal string `"admin"`, which will never match. Use `/admin/flash/add` instead — it correctly checks `role` against the `users` table via `require_admin`.
+- **Multi-item orders only persist the last item.** In `buy.py`'s `process_payment`, the `Order` row is built inside the loop but added/committed outside it, so only the final item in a multi-item purchase gets written to Postgres.
+- **JWTs don't expire.** No `exp` claim is set on issue, so tokens are valid indefinitely unless `SECRET_KEY` is rotated.
+- **`requirements.txt` is UTF-16 encoded.** It needs to be re-saved as UTF-8 before `pip install -r requirements.txt` will reliably work on most setups.
+- **No Nginx, rate-limiting, or anti-bot protection yet** — despite what earlier drafts of this README claimed. These are on the roadmap, not in the code.
+- **No signup route** — users must currently be inserted into the `users` table directly.
+
+## Roadmap
+
+- Fix the two bugs above (multi-item order persistence, `/stock/set` admin check)
+- Add a signup endpoint and password reset flow
+- Add Nginx reverse proxy for horizontal scaling across multiple API replicas
+- Add rate-limiting (e.g. `slowapi`) and basic anti-bot checks on `/buy/`
+- Add token expiry + refresh flow
+- Load testing with Locust to validate behavior under actual burst traffic
 
 ## Acknowledgements
 
-- **Savana** for the inspiration – the One Rupee One Impact campaign.
-- **FastAPI** and **Redis** for the incredible developer experience.
-
-
-
-For asynchronous event delivery (emails, webhooks, retries), see Relay.
+- Inspired by Savana's "One Rupee, One Impact" flash-sale campaign model.
