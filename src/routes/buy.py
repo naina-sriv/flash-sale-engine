@@ -4,12 +4,27 @@ from src.models.requests import BuyRequest
 from src.dependencies.auth import get_current_user
 import time
 import asyncio
+from src.schema.db_models import Order
+from src.core.db import AsyncSessionLocal
+from datetime import datetime
 
 
 async def process_payment(user_id: str, item_ids:list):
     print("⏳ Background task started...")   # <-- Add this
     await asyncio.sleep(3)
     print(f"✅ Payment successful for user {user_id} for items {item_ids}")
+    async with AsyncSessionLocal() as session:
+        for item_id in item_ids:
+                new_order = Order(
+                user_id=int(user_id),
+                product_id=int(item_id),
+                quantity=1,
+                price_at_purchase=10.0,  # placeholder — later, fetch from products table
+                status="paid"
+            )
+        session.add(new_order)
+        await session.commit()
+        print(f"✅ Order(s) saved for user {user_id}")
     
 router= APIRouter(prefix="/buy")
 @router.post("/")
@@ -38,7 +53,7 @@ async def click_buy(req:BuyRequest, user_id:str=Depends(get_current_user)):
             redis_client.delete(f"lease:{user_id}")
             return {"message": f"out of stock item {i}"}
         else:
-            reserved_items.srcend(i)
+            reserved_items.append(i)
     redis_client.setex(lease_key, 10, "active")
     if count==1:
         redis_client.setex(f"purchased_flash:{user_id}",89400,"active")

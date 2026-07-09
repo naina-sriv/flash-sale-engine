@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from src.models.requests import LoginRequest
 from src.core.config import SECRET_KEY, ALGORITHM
 import jwt
@@ -30,12 +30,3 @@ async def login(request: LoginRequest):
     )
     return {"token": token}
 
-async def require_admin(user_id: str = Depends(get_current_user)):
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).where(User.id == int(user_id)))
-        user = result.scalar_one_or_none()
-        if not user:
-            raise HTTPException(403, "User not found")
-        if user.role != "admin":
-            raise HTTPException(403, "Admin privileges required")
-        return user_id

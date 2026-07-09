@@ -1,1 +1,0 @@
-UPDATE users SET hashed_password = '$2b$12$5n5BQO0DAzKfk6PcteBVyuNCsBeX41ZFEJkJdq2U6WVF1qhBSvqoa' WHERE email = 'admin@example.com';
