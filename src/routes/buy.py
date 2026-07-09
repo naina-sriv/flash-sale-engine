@@ -182,3 +182,26 @@ async def click_buy(req: BuyRequest, user_id: str = Depends(buy_rate_limiter)):
 
     asyncio.create_task(process_payment(user_id, req.item_id))
     return BuyResponse(message="reserved")
+
+from pydantic import BaseModel
+
+class StressBuyRequest(BaseModel):
+    user_id: str
+    item_id: str
+
+@router.post("/stress")
+async def stress_buy(req: StressBuyRequest):
+    user_id = req.user_id
+    item_id = req.item_id
+    
+    lease_key = f"lease:{user_id}"
+    if redis_client.exists(lease_key):
+        return {"message": "already reserved"}
+        
+    new_val = redis_client.decr(f"stock:{item_id}")
+    if new_val < 0:
+        redis_client.incr(f"stock:{item_id}")
+        return {"message": "out of stock"}
+        
+    redis_client.set(lease_key, "active", ex=10)
+    return {"message": "reserved"}
