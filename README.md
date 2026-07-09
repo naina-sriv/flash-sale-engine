@@ -1,5 +1,11 @@
 # Flash Sale Engine
 
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
+![Nginx](https://img.shields.io/badge/nginx-%23009639.svg?style=for-the-badge&logo=nginx&logoColor=white)
+
 A high-concurrency, horizontally scaled flash-sale backend engineered to handle extreme traffic bursts. Built with **FastAPI**, **Redis**, and **PostgreSQL**, this engine uses atomic Redis operations to completely eliminate overselling and race conditions without creating database bottlenecks.
 
 ## Architecture & System Topology
@@ -115,3 +121,9 @@ python -m locust -f stress_locustfile.py --headless -u 1000 -r 200 --run-time 30
 | `/admin/flash/add` | POST | JWT+Admin | Adds an item to the flash sale |
 | `/admin/flash/remove`| POST | JWT+Admin | Removes an item from the flash sale |
 | `/admin/flash/list` | GET | JWT+Admin | Lists current flash-sale items |
+
+## Inspiration
+
+This project was heavily inspired by the infamous **Savana 1 Rupee Sale**, where massive influxes of traffic attempting to purchase highly discounted items simultaneously crashed servers and exposed the flaws in traditional e-commerce architectures. 
+
+When thousands of users try to buy a 1-rupee item at the exact same millisecond, traditional databases suffer from massive I/O bottlenecks and row-lock contention. By shifting the atomic locking mechanisms away from standard relational database constraints and into ultra-fast, single-threaded Redis primitives, this engine demonstrates how to architect a backend that thrives under extreme traffic spikes rather than collapsing under them.
