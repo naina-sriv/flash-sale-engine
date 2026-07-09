@@ -5,5 +5,5 @@ class BuyRequest(BaseModel):
     item_id: list[str]
 
 class LoginRequest(BaseModel):
-    user_id:str
-    password:str
+    email: str
+    password: str

@@ -247,3 +247,7 @@ flash-sale-engine/
 
 - **Savana** for the inspiration – the One Rupee One Impact campaign.
 - **FastAPI** and **Redis** for the incredible developer experience.
+
+
+
+For asynchronous event delivery (emails, webhooks, retries), see Relay.
