@@ -19,6 +19,7 @@ def sqlite_session_factory(monkeypatch):
     SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     from src.core import db as db_module
+    from src.schema import db_models  # noqa: F401
 
     async def _create_tables():
         async with engine.begin() as conn:
